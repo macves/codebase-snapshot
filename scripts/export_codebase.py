@@ -36,7 +36,10 @@ def fence(text): return "~" * max(3, max((len(x) for x in re.findall(r"~+", text
 
 def secret_key(key):
     k = re.sub(r"[^a-z0-9]+", "_", key.lower()).strip("_")
-    return k not in {"password_min_length", "password_policy", "secret_rotation_days"} and bool(re.fullmatch(SECRET, k, re.I))
+    safe_suffixes = ("_file", "_path", "_name", "_enabled", "_policy",
+                     "_min_length", "_rotation_days")
+    if k.endswith(safe_suffixes): return False
+    return bool(re.search(r"(?:^|_)" + SECRET + r"(?:$|_)", k, re.I))
 
 def redact(text):
     count = 0
@@ -186,11 +189,11 @@ def selftest():
     with tempfile.TemporaryDirectory() as d:
         root = Path(d) / "source tree"; root.mkdir(); out = root / "snapshot.md"; (root / "src").mkdir(); (root / ".hidden").write_text("visible=yes\n")
         (root / "src" / "Main.java").write_text("class Main {}\n"); (root / "Cargo.toml").write_text("[package]\nname = 'mixed'\n")
-        canary = "SYNTHETIC_CANARY_DO_NOT_LEAK_9d7a1c"; (root / ".env").write_text("PORT=8080\nAPI_KEY=" + canary + "\nPASSWORD_MIN_LENGTH=12\n")
+        canary = "SYNTHETIC_CANARY_DO_NOT_LEAK_9d7a1c"; (root / ".env").write_text("PORT=8080\nAPI_KEY=" + canary + "\nDB_PASSWORD=" + canary + "\nOAUTH_CLIENT_SECRET=" + canary + "\nPASSWORD_MIN_LENGTH=12\nDB_PASSWORD_FILE=/run/secrets/db\n")
         (root / "private.pem").write_text("-----BEGIN PRIVATE KEY-----\n" + canary + "\n-----END PRIVATE KEY-----\n"); (root / "binary.bin").write_bytes(b"x\0y"); (root / "fence.md").write_text("~~~~~\ntext\n"); (root / "space ñ.txt").write_text("unicode=yes\n")
         (root / "target").mkdir(); (root / "target" / "generated.rs").write_text("should_not_appear\n")
         os.symlink("src/Main.java", root / "inside-link"); os.symlink("/outside-root", root / "outside-link")
-        assert export(str(root), str(out)).startswith("PASS"); text = out.read_text(); assert canary not in text and "PORT=8080" in text and "PASSWORD_MIN_LENGTH=12" in text and "space ñ.txt" in text and "OMITTED_EXTERNAL_SYMLINK" in text and "OMITTED_TARGET_BUILD" in text and "should_not_appear" not in text and verify(str(root), str(out))[0]
+        assert export(str(root), str(out)).startswith("PASS"); text = out.read_text(); assert canary not in text and "PORT=8080" in text and "PASSWORD_MIN_LENGTH=12" in text and "DB_PASSWORD_FILE=/run/secrets/db" in text and "space ñ.txt" in text and "OMITTED_EXTERNAL_SYMLINK" in text and "OMITTED_TARGET_BUILD" in text and "should_not_appear" not in text and verify(str(root), str(out))[0]
         old = parse_artifact(text)[0]["digest"]; export(str(root), str(out)); assert parse_artifact(out.read_text())[0]["digest"] == old
         (root / "src" / "Main.java").write_text("class Changed {}\n"); (root / "added.toml").write_text("timeout = 30\n"); export(str(root), str(out)); changed = out.read_text()
         assert "class Changed" in changed and "class Main {}" not in changed and "timeout = 30" in changed and parse_artifact(changed)[0]["digest"] != old and verify(str(root), str(out))[0]
