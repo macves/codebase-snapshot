@@ -60,6 +60,11 @@ class ManagedSnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(managed.ManagedSnapshotError, "PROJECT_NOT_REGISTERED"):
             managed.ensure_registered(FakePipeline(), "unknown")
 
+    def test_publication_unavailable_is_explicit_failure(self):
+        pipeline = managed.Pipeline("http://127.0.0.1:1", "synthetic-key")
+        with self.assertRaisesRegex(managed.ManagedSnapshotError, "PUBLICATION_UNAVAILABLE"):
+            pipeline.request("GET", "/api/v1/projects")
+
 
 if __name__ == "__main__":
     unittest.main()

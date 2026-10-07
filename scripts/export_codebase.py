@@ -196,6 +196,20 @@ def selftest():
         assert "class Changed" in changed and "class Main {}" not in changed and "timeout = 30" in changed and parse_artifact(changed)[0]["digest"] != old and verify(str(root), str(out))[0]
         (root / "added.toml").unlink(); (root / "src" / "Main.java").rename(root / "src" / "Renamed.java"); export(str(root), str(out)); refreshed = out.read_text()
         assert "added.toml" not in refreshed and "src/Renamed.java" in refreshed and "src/Main.java" not in refreshed
+        original_stat_key = globals()["stat_key"]; calls = 0
+        def changing_stat_key(path):
+            nonlocal calls
+            value = original_stat_key(path)
+            if Path(path).name == "Renamed.java":
+                calls += 1
+                if calls == 2: return value[:-1] + (value[-1] + 1,)
+            return value
+        globals()["stat_key"] = changing_stat_key
+        try:
+            _, unstable = scan(str(root), str(out))
+            assert any(r.path == "src/Renamed.java" and r.disposition == "ERROR_MUTATED_DURING_SNAPSHOT" for r in unstable)
+        finally:
+            globals()["stat_key"] = original_stat_key
         known_good = out.read_bytes(); (root / "bad-utf8.txt").write_bytes(b"\xff")
         try: export(str(root), str(out)); raise AssertionError("expected strict export failure")
         except RuntimeError: pass
