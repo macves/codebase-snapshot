@@ -1,0 +1,3 @@
+interface:
+  display_name: "Codebase Markdown Export"
+  short_description: "Export a complete sanitized codebase snapshot"
